@@ -1,0 +1,73 @@
+name: Windows RDP
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rdp:
+    runs-on: windows-latest
+
+    steps:
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - name: Enable RDP
+        shell: powershell
+        run: |
+          Set-ItemProperty `
+            -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" `
+            -Name "fDenyTSConnections" `
+            -Value 0
+
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+
+          Set-Service -Name TermService -StartupType Automatic
+
+          Start-Service TermService
+
+      - name: Create RDP User
+        shell: powershell
+        run: |
+          $password = ConvertTo-SecureString `
+            "max12" `
+            -AsPlainText `
+            -Force
+
+          New-LocalUser `
+            -Name "rdpuser" `
+            -Password $password `
+            -AccountNeverExpires `
+            -PasswordNeverExpires
+
+          Add-LocalGroupMember `
+            -Group "Remote Desktop Users" `
+            -Member "rdpuser"
+
+      - name: Show RDP Information
+        shell: powershell
+        run: |
+          Write-Host ""
+          Write-Host "======================================"
+          Write-Host "          WINDOWS RDP READY"
+          Write-Host "======================================"
+          Write-Host "Username: rdpuser"
+          Write-Host "Password: max12"
+          Write-Host ""
+          Write-Host "Tailscale IPv4:"
+          tailscale ip -4
+          Write-Host ""
+          Write-Host "======================================"
+
+      - name: Keep RDP Running
+        shell: powershell
+        run: |
+          Write-Host "RDP is running..."
+          Write-Host "Do NOT stop this GitHub Actions job."
+          Start-Sleep -Seconds 21600
